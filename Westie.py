@@ -4,6 +4,7 @@
 # Luiz Sales
 # luiz@lsales.biz
 
+import os
 import getpass
 import nmap
 import sys
@@ -22,62 +23,81 @@ import netsnmp
 #output = snmp_extract(snmp_data)
 #print output
 
-
 network  = sys.argv[1]
 
+def ws_snmp(self):
+	oid = netsnmp.VarList(netsnmp.Varbind('.1.3.6.1.2.1.1.1.0'))
+	res = netsnmp.snmpwalk(oid, Version = 2, DestHost=hst, Community='public')
+	print res
+
+
+
+def ws_linux():
+	try:
+		ssh = paramiko.SSHClient()
+		ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+		ssh.connect(hst, username='user', password='pass', timeout=10)
+		stdin,stdout,stderr = ssh.exec_command("uname -a")
+		type(stdin)
+		print stdout.readlines()
+		ssh.close()
+	except paramiko.SSHException:
+		print "Connection Failed"
+		ssh.close()
+	except paramiko.AuthenticationException:
+		print "Authentication Failed"
+		ssh.close()
+	except:
+		print "Unknown error"
+		ssh.close()
+
+def ws_windows():
+	conn = SMBConnection("user user", pass, myname, hst, use_ntlm_v2 = True)
+	conn.connect(hst, port=139)
+	file2transfer = open(filename,"r")
+	conn.storeFile(share,path + filename, file2transfer, timeout=30 )
+
 nm = nmap.PortScanner()
-nm.scan(hosts= network, arguments='-sTU -p 22-161 ')
-for host in nm.all_hosts():
-	hst = host
-	for proto in nm[host].all_protocols():
+nm.scan(hosts= network, arguments='-sTUV -p1-500 ')
+print nm.all_hosts()
+for hst in nm.all_hosts():
+	print "1o for %s %s" % (hst,nm.all_hosts())
+	for proto in nm[hst].all_protocols():
+		print "2o for %s %s %s" % (hst,proto,nm[hst].all_protocols())
 		prdslst = []
 		extralst= []
-		for prts in nm[host][proto].keys():
-#			print "%s  -  %s  -  %s" % (hst,proto,prts)
-			extralst.append(nm[host][proto][prts]['extrainfo'])
+		for prts in nm[hst][proto].keys():
+			print "3o for %s %s %s %s " % (hst,proto,prts,nm[hst][proto].keys())
+			extralst.append(nm[hst][proto][prts]['extrainfo'])
 #			print "%s %s " % (extralst,prts)
-			if prts == 22 and any("FreeBSD" in s for s in extralst):
+			state = nm[hst][proto][prts]['state']
+			if (prts == 22) and (proto == 'tcp') and (state == 'open') and any("FreeBSD" in s for s in extralst):
 				SO = 'Appliance'
-				#sys.stdout.write("%s is %s " % (hst,SO))
 				print ""
 				print "%s is %s " % (hst,SO)
-                        if (proto == 'udp') and (prts == 161):
+                        if (proto == 'udp') and (prts == 161) and (state == 'open'):
 				SO = 'Network Device'
                                 #sys.stdout.write("%s is Netvork device" % (hst))
 				print ""
+				#ws_snmp
 				print "%s is %s" % (hst,SO)
-				oid = netsnmp.VarList(netsnmp.Varbind('.1.3.6.1.2.1.1.1.0'))
-				res = netsnmp.snmpwalk(oid, Version = 2, DestHost=hst, Community='public')
-				print res	
-			elif prts == 22:
+			elif (prts == 22) and (proto == 'tcp') and (state == 'tcp'):
 				SO = 'Linux'
 				print ""
 				print "%s is %s" % (hst,SO)
-				try:
-					ssh = paramiko.SSHClient()
-					ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        				ssh.connect(hst, username=user, password=pass, timeout=10)
-					stdin,stdout,stderr = ssh.exec_command("uname -a")
-        	                        type(stdin)
-					print stdout.readlines()
-					ssh.close()
-				except paramiko.SSHException:
-        				print "Connection Failed"
-        				ssh.close()
-				except paramiko.AuthenticationException:
-    					print "Authentication Failed"
-					ssh.close()
-				except:
-    					print "Unknown error"
-					ssh.close()
-
-			prds = nm[host][proto][prts]['product']
+				#ws_linux()
+			prds = nm[hst][proto][prts]['product']
 			prdslst.append(prds)
-			if any("Microsoft" in s for s in prdslst):
+			if (prts == 139) or (prts == 445) and (proto == 'tcp') and (state == 'open'):
+			#if any("Microsoft" in s for s in prdslst) or (prts == 139) or (prts == 445):
 				SO = 'Windows'
-				#sys.atdout.write("%s is Windows" % (hst))
 				print ""
 				print "%s is %s" % (hst,SO)
-						
+			#	ws_windows()
+			#	os.system("psexec.py \"user\":pass@" + hst + " whoami ")
+			#	os.system("sudo mount -t cifs -o username=\"user\",password=pass //" + hst + "/c$ winc/ ")
+			#	os.system("echo \"funcionou\" > winc/WestieOK.txt ") 
+			#	os.system("sudo umount winc/ ")
+
 
 
